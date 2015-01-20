@@ -32,11 +32,7 @@ R = diag([1,1]);
 
 terminalCostCompute;
 
-N = 6;
-wIdx = logical(zeros(N,size(G,1)));
-uIdx = logical(zeros(N,size(F,1)));
 
-sizes.N = N;
 sizes.nX = size(A,2);
 sizes.nU = size(B,2);
 sizes.nW = size(D,2);

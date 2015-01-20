@@ -1,28 +1,32 @@
-function sol = maxWrapper(P,q,Ch,phih,actW,s)
+function sol = maxWrapper(P,q,Ch,phih,actW,actX,s,m)
 
 % [K  L'][x]        =   [LHSconst]  + [LHSvar][theta]
 % [L  0 ][lambda]   =   [LHSconst]  + [LHSvar][theta]
 
-nlambda = length(find(actW));
+nlambda = length(find(actW{m}));
+neta = length(find(actX{m}));
 
 K = blkdiag(-s.gammasq*eye(s.nW),P(1:s.nX,1:s.nX));
-L = [s.G(actW,:),zeros(nlambda,s.nX);
-    -s.D,eye(s.nX);
-     zeros(size(Ch,1),s.nW),Ch(:,1:s.nX)];
+L = [-s.D,eye(s.nX);    
+    zeros(neta,s.nW),s.S{m}(actX{m},1:s.nX);
+    s.G(actW{m},:),zeros(nlambda,s.nX);
+    zeros(size(Ch,1),s.nW),Ch(:,1:s.nX)];
  
 LHSconst = [zeros(s.nW,1);
             -q(1:s.nX);
-            ones(nlambda,1);
             zeros(s.nX,1);
+            s.s{m}(actX{m});
+            ones(nlambda,1);
             phih];
             
 LHSvar = [zeros(s.nW,s.nX+s.nU+s.nAlpha+s.nBeta);
           zeros(s.nX,s.nX+s.nU),-P(1:s.nX,s.nX+1:end);
-          zeros(nlambda,s.nX+s.nU+s.nAlpha),ones(nlambda,s.nBeta);
           s.A,s.B,zeros(s.nX,s.nAlpha+s.nBeta);
+          zeros(neta,s.nX+s.nU),-s.S(actX{m},s.nX+1:end);
+          zeros(nlambda,s.nX+s.nU+s.nAlpha),ones(nlambda,s.nBeta);
           zeros(size(Ch,1),s.nX+s.nU),-Ch(:,s.nX+1:end)];
           
-        [Q,R] = qr(L');
+        [Q,~] = qr(L');
         if and(~isempty(L),size(L,1)+1<=size(Q,2))
             EW = eig(Q(:,size(L,1)+1:end)'*K*Q(:,size(L,1)+1:end));
         elseif size(L,1)+1>size(Q,2)
@@ -39,67 +43,73 @@ LHSvar = [zeros(s.nW,s.nX+s.nU+s.nAlpha+s.nBeta);
       
 [RHSconst,RHSvar,RHSorth] = KKTSolver(K,L,LHSconst,LHSvar);
 
-sol.wM = RHSvar(1:s.nW,:);
-sol.wm = RHSconst(1:s.nW);
+firstIdx = 1;
+Range = firstIdx:(firstIdx+s.nW-1);
+firstIdx = Range(end)+1;
 
-sol.xpM = RHSvar(s.nW+1:s.nW+s.nX,:);
-sol.xpm = RHSconst(s.nW+1:s.nW+s.nX);
+sol.wM = RHSvar(Range,:);
+sol.wm = RHSconst(Range);
 
-if nlambda>0
-    sol.lambdaM = RHSvar(s.nW+s.nX+1:s.nW+s.nX+nlambda,:);
-    sol.lambdam = RHSconst(s.nW+s.nX+1:s.nW+s.nX+nlambda);
-    
-    
-    sol.muM = RHSvar(s.nW+s.nX+nlambda+1:s.nW+s.nX+nlambda+s.nMu,:);
-    sol.mum = RHSconst(s.nW+s.nX+1+nlambda:s.nW+s.nX+nlambda+s.nMu);
-    
-    if ~isempty(RHSorth)
-        sol.lambdaZ = RHSorth(s.nW+s.nX+1:s.nW+s.nX+nlambda,:);
-        sol.muZ = RHSorth(s.nW+s.nX+1+nlambda:s.nW+s.nX+nlambda+s.nMu,:);
-    else
-        sol.lambdaZ = [];
-        sol.muZ = [];
-    end
-    
-    if ~isempty(Ch)
-    sol.zetaM = RHSvar(s.nW+s.nX+nlambda+s.nX+nlambda+1:end,:);
-    sol.zetam = RHSconst(s.nW+s.nX+nlambda+s.nX+nlambda+1:end);
-        if ~isempty(RHSorth)
-            sol.zetaZ = RHSorth(s.nW+s.nX+nlambda+s.nX+nlambda+1:end,:);
-        else
-            sol.zetaZ = [];
-        end
-    else
-        sol.zetaM = [];
-        sol.zetam = [];
-        sol.zetaZ = [];
-    end
-    
+Range = firstIdx:(firstIdx+s.nX-1);
+firstIdx = Range(end)+1;
+
+sol.xpM = RHSvar(Range,:);
+sol.xpm = RHSconst(Range);
+
+Range = firstIdx:(firstIdx+s.nMu-1);
+firstIdx = Range(end)+1;
+
+sol.muM = RHSvar(Range,:);
+sol.mum = RHSvar(Range);
+
+if ~isempty(RHSorth)
+    sol.muZ = RHSorth(Range,:);
 else
-    sol.lambdaM = [];
-    sol.lambdam = [];
+    sol.muZ = [];
+end
+
+Range = zeros(1,0);
+
+if neta > 0
+    Range = firstIdx:(firstIdx+neta-1);
+    firstIdx = Range(end)+1;
+end
+
+sol.etaM = RHSvar(Range,:);
+sol.etam = RHSconst(Range);
+
+if ~isempty(RHSorth)
+    sol.etaZ = RHSorth(Range,:);
+else
+    sol.etaZ = [];
+end
+
+Range = zeros(1,0);
+
+if nlambda > 0
+    Range = firstIdx:(firstIdx+nlambda-1);
+    firstIdx = Range(end)+1;
+end
+
+sol.lambdaM = RHSvar(Range,:);
+sol.lambdam = RHSconst(Range);
+
+if ~isempty(RHSorth)
+    sol.lambdaZ = RHSorth(Range,:);
+else
     sol.lambdaZ = [];
-    
-    
-    sol.muM = RHSvar(s.nW+s.nX+1:s.nW+s.nX+s.nX,:);
-    sol.mum = RHSconst(s.nW+s.nX+1:s.nW+s.nX+s.nX);
-    if ~isempty(RHSorth);
-        sol.muZ = RHSorth(s.nW+s.nX+1:s.nW+s.nX+s.nX,:);
+end
+
+if ~isempty(Ch)
+    sol.zetaM = RHSvar(firstIdx:end,:);
+    sol.zetam = RHSconst(firstIdx:end);
+    if ~isempty(RHSorth)
+        sol.zetaZ = RHSorth(firstIdx:end,:);
     else
-        sol.muZ = [];
-    end
-    
-    if ~isempty(Ch)
-    sol.zetaM = RHSvar(s.nW+s.nX+s.nX+1:end,:);
-    sol.zetam = RHSconst(s.nW+s.nX+s.nX:end);
-        if ~isempty(RHSorth)
-            sol.zetaZ = RHSorth(s.nW+s.nX+s.nX:end,:);
-        else
-            sol.zetaZ = [];
-        end
-    else
-        sol.zetaM = [];
-        sol.zetam = [];
         sol.zetaZ = [];
     end
+else
+    sol.zetaM = [];
+    sol.zetam = [];
+    sol.zetaZ = [];
 end
